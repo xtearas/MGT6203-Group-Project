@@ -1,4 +1,6 @@
-# By Silvia Vangelova, Jack Li, Joanna Stefaniak, Chengxuan Feng, Max Midlash
+# Cool, Quiet City Competition - Predicting thermal preference with Digital Twin Metrics 
+
+*By Silvia Vangelova, Jack Li, Joanna Stefaniak, Chengxuan Feng, Max Midlash; Georgia Institute of Technology*
 
 ## Data Preparation
 The data used in this analysis comes from a Kaggle competition using smartwatch data from users in Singapore \[1\]. We have two types of data sets: user response logs combined with their smartwatch readings, and meteorological measurements from specific weather stations in Singapore about humidity, wind, temperature, and rainfall. One important characteristic that both types of datasets have in common is that they are both time-series datasets. Their date-time columns have been converted to time objects. In addition, we have a dataframe with the IDs and locations of all weather stations in the city from which the measurements were taken.
@@ -7,7 +9,7 @@ The data used in this analysis comes from a Kaggle competition using smartwatch 
 
 The user response dataset consists of two parts - one for training, with 1,149,136 rows, and one for testing, with 996,429 rows. The test to training ratio is 0.88, meaning 46% of the total user response data can be used to compare the quality of different types of models. To do so we further divide the training dataset into two parts - 80% of the data is used for model fitting and 20% is used for model cross-validation. After we have chosen the best of each type of model we can then compare them based on their performance on the remaining test dataset.
 
-![img](./images/thermal preference map.png?raw=true)
+![img](./images/thermal_preference_map.png?raw=true)
 
 The user response dataset consists of two parts - one for training, with 1,149,136 rows, and one for testing, with 996,429 rows. The test to training ratio is 0.88, meaning 46% of the total user response data can be used to compare the quality of different types of models. To do so we further divide the training dataset into two parts - 80% of the data is used for model fitting and 20% is used for model cross-validation. After we have chosen the best of each type of model we can then compare them based on their performance on the remaining test dataset.
 
@@ -68,4 +70,5 @@ Reference:
 
 \[1\] Clayton Miller, Matias Quintana, Mario Frei, Yun Xuan Chua, Chun Fu, Bianca Picchetti, Winston Yap, Adrian Chong, and Filip Biljecki. 2023. Introducing the Cool, Quiet City Competition: Predicting Smartwatch-Reported Heat and Noise with Digital Twin Metrics. In Proceedings of the 10th ACM International Conference on Systems for Energy-Efficient Buildings, Cities, and Transportation (BuildSys '23). Association for Computing Machinery, New York, NY, USA, 298–299. https://doi.org/10.1145/3600100.3626269
 
+\[2\]  Yap, W., Biljecki, F. A Global Feature-Rich Network Dataset of Cities and Dashboard for Comprehensive Urban Analyses. Sci Data 10, 667 (2023). https://doi.org/10.1038/s41597-023-02578-1 
 
