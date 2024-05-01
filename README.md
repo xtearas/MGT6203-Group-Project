@@ -1,6 +1,7 @@
 # Cool, Quiet City Competition - Predicting thermal preference with Digital Twin Metrics 
 
 *By Silvia Vangelova<sup>a</sup>, Jack Li<sup>a</sup>, Joanna Stefaniak<sup>a</sup>, Chengxuan Feng<sup>a</sup>, Max Midlash<sup>a</sup>*
+
 *<sup>a</sup> Georgia Institute of Technology, School of Industrial and Systems Engineering*
 
 <img align="center" src="./images/tree_model.png" alt="tree_model.png">
