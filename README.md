@@ -1,12 +1,12 @@
-<p align="center">
-# Cool, Quiet City Competition - Predicting thermal preference with Digital Twin Metrics 
+
+# <p align="center"> Cool, Quiet City Competition - Predicting thermal preference with Digital Twin Metrics </p>
 
 *By Silvia Vangelova<sup>a</sup>, Jack Li<sup>a</sup>, Joanna Stefaniak<sup>a</sup>, Chengxuan Feng<sup>a</sup>, Max Midlash<sup>a</sup>*
 
 *<sup>a</sup>Georgia Institute of Technology, School of Industrial and Systems Engineering*
 
 <img align="center" src="./images/tree_model.png" alt="tree_model.png">
-</p>
+
 
 ### Data Preparation
 The data used in this analysis comes from a Kaggle competition using smartwatch data from users in Singapore \[1\]. We have two types of data sets: user response logs combined with their smartwatch readings, and meteorological measurements from specific weather stations in Singapore about humidity, wind, temperature, and rainfall. One important characteristic that both types of datasets have in common is that they are both time-series datasets. Their date-time columns have been converted to time objects. In addition, we have a dataframe with the IDs and locations of all weather stations in the city from which the measurements were taken.
