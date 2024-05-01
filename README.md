@@ -11,7 +11,7 @@ The data used in this analysis comes from a Kaggle competition using smartwatch 
 
 The user response dataset consists of two parts - one for training, with 1,149,136 rows, and one for testing, with 996,429 rows. The test to training ratio is 0.88, meaning 46% of the total user response data can be used to compare the quality of different types of models. To do so we further divide the training dataset into two parts - 80% of the data is used for model fitting and 20% is used for model cross-validation. After we have chosen the best of each type of model we can then compare them based on their performance on the remaining test dataset.
 
-<div style="text-align:center"><img src="./images/thermal_preference_map.png" /></div>
+<img align="center" src="./images/thermal_preference_map.png" alt="thermal_preference_map.png">
 
 The user response dataset consists of two parts - one for training, with 1,149,136 rows, and one for testing, with 996,429 rows. The test to training ratio is 0.88, meaning 46% of the total user response data can be used to compare the quality of different types of models. To do so we further divide the training dataset into two parts - 80% of the data is used for model fitting and 20% is used for model cross-validation. After we have chosen the best of each type of model we can then compare them based on their performance on the remaining test dataset.
 
