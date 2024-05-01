@@ -1,10 +1,12 @@
+<p align="center">
 # Cool, Quiet City Competition - Predicting thermal preference with Digital Twin Metrics 
 
 *By Silvia Vangelova<sup>a</sup>, Jack Li<sup>a</sup>, Joanna Stefaniak<sup>a</sup>, Chengxuan Feng<sup>a</sup>, Max Midlash<sup>a</sup>*
 
-*<sup>a</sup> Georgia Institute of Technology, School of Industrial and Systems Engineering*
+*<sup>a</sup>Georgia Institute of Technology, School of Industrial and Systems Engineering*
 
 <img align="center" src="./images/tree_model.png" alt="tree_model.png">
+</p>
 
 ### Data Preparation
 The data used in this analysis comes from a Kaggle competition using smartwatch data from users in Singapore \[1\]. We have two types of data sets: user response logs combined with their smartwatch readings, and meteorological measurements from specific weather stations in Singapore about humidity, wind, temperature, and rainfall. One important characteristic that both types of datasets have in common is that they are both time-series datasets. Their date-time columns have been converted to time objects. In addition, we have a dataframe with the IDs and locations of all weather stations in the city from which the measurements were taken.
@@ -69,7 +71,7 @@ They can be obtained from: https://www.kaggle.com/competitions/cool-quiet-city-c
 
 Make sure they are in the same directory as the Notebook
 
-Reference:
+References:
 
 \[1\] Clayton Miller, Matias Quintana, Mario Frei, Yun Xuan Chua, Chun Fu, Bianca Picchetti, Winston Yap, Adrian Chong, and Filip Biljecki. 2023. Introducing the Cool, Quiet City Competition: Predicting Smartwatch-Reported Heat and Noise with Digital Twin Metrics. In Proceedings of the 10th ACM International Conference on Systems for Energy-Efficient Buildings, Cities, and Transportation (BuildSys '23). Association for Computing Machinery, New York, NY, USA, 298–299. https://doi.org/10.1145/3600100.3626269
 
