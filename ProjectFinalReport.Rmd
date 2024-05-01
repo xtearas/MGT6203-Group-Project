@@ -1,0 +1,895 @@
+---
+title: "MGT6203 Group Project"
+subtitle: Final Report
+date: "04/21/2024"
+output: 
+  html_document:
+    df_print: paged
+  html_notebook:
+    theme: sandstone
+    highlight: tango
+  pdf_document:
+    keep_tex: true
+    highlight: tango
+    df_print: paged
+---
+```{r, warning=FALSE, message=FALSE}
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(visdat)
+library(tidyr)
+library(data.table)
+library(raster)
+library(nnet)
+library(purrr)
+library(DataExplorer)
+library(pscl)
+library(tree)
+library(rpart)
+library(rpart.plot)
+library(ISLR)
+library(randomForest)
+library(kableExtra)
+library(broom)
+library(rattle)	
+library(corrplot)
+library(Metrics)
+```
+
+```{r}
+# read our data
+survey_data_test <- read.csv("cozie_responses_and_physiological_data_test_public.csv", 
+                        sep = ",", header = TRUE)
+```
+
+
+```{r}
+# read our data
+survey_data <- read.csv("cozie_responses_and_physiological_data_training.csv", 
+                        sep = ",", header = TRUE)
+```
+
+
+```{r}
+
+weather_rainfall_data <- read.csv("weather_rainfall.csv", 
+                        sep = ",", header = TRUE)
+
+weather_wind_speed_data <- read.csv("weather_wind-speed.csv", 
+                        sep = ",", header = TRUE)
+
+weather_wind_direction_data <- read.csv("weather_wind-direction.csv", 
+                        sep = ",", header = TRUE)
+
+weather_stations_data <- read.csv("weather_stations.csv", 
+                        sep = ",", header = TRUE)
+
+weather_temperature_data <- read.csv("weather_air-temperature.csv", 
+                        sep = ",", header = TRUE)
+
+weather_humidity_data <- read.csv("weather_relative-humidity.csv", 
+                        sep = ",", header = TRUE)
+
+```
+
+
+```{r}
+clean_weather_data <- function(weather_data){
+  # remove rows that have only missing values and replace remaining NA values with average of row
+  avg_temps <-
+    rowMeans(subset(weather_data[rowSums(is.na(weather_data)) != ncol(weather_data),], select = c(-X)), na.rm = T)
+  weather_data <-
+    weather_data[rowSums(is.na(weather_data)) != ncol(weather_data),] %>%
+    mutate(across(where(is.numeric),
+                  ~ if_else(is.na(.), avg_temps, .)))
+  
+  weather_data <- weather_data %>% 
+    mutate_at(vars(colnames(weather_data)[colnames(weather_data) != "X"]), as.numeric)
+
+  return(weather_data)
+}
+```
+
+```{r}
+weather_rainfall_data %>% plot_missing()
+```
+```{r}
+weather_rainfall_data_clean <-clean_weather_data(weather_rainfall_data)
+weather_rainfall_data_clean %>% plot_missing()
+```
+```{r}
+weather_temperature_data %>% plot_missing()
+```
+```{r}
+weather_temperature_data_clean <-clean_weather_data(weather_temperature_data)
+weather_temperature_data_clean %>% plot_missing()
+```
+```{r}
+weather_wind_direction_data %>% plot_missing()
+```
+```{r}
+weather_wind_direction_data_clean <-clean_weather_data(weather_wind_direction_data)
+weather_wind_direction_data_clean %>% plot_missing()
+```
+```{r}
+weather_wind_speed_data %>% plot_missing()
+```
+```{r}
+weather_wind_speed_data_clean <-clean_weather_data(weather_wind_speed_data)
+weather_wind_speed_data_clean %>% plot_missing()
+```
+```{r}
+weather_humidity_data %>% plot_missing()
+```
+```{r}
+weather_humidity_data_clean <-clean_weather_data(weather_humidity_data)
+weather_humidity_data_clean %>% plot_missing()
+```
+
+```{r}
+weather_humidity_data_clean <- weather_humidity_data_clean %>% # convert time to time object
+  #mutate(date_time = ymd_hms(weather_humidity_data_clean$X))
+  mutate(date_time = ymd_hms(unlist(map(strsplit(weather_humidity_data_clean$X, split='+', fixed=TRUE), 1))))
+
+weather_temperature_data_clean <- weather_temperature_data_clean %>% # convert time to time object
+  #mutate(date_time = ymd_hms(weather_temperature_data_clean$X))
+  mutate(date_time = ymd_hms(unlist(map(strsplit(weather_temperature_data_clean$X, split='+', fixed=TRUE), 1))))
+  
+weather_wind_direction_data_clean <- weather_wind_direction_data_clean %>% # convert time to time object
+  #mutate(date_time = ymd_hms(weather_wind_direction_data_clean$X))
+  mutate(date_time = ymd_hms(unlist(map(strsplit(weather_wind_direction_data_clean$X, split='+', fixed=TRUE), 1))))
+  
+weather_wind_speed_data_clean <- weather_wind_speed_data_clean %>% # convert time to time object
+  #mutate(date_time = ymd_hms(weather_wind_speed_data_clean$X))
+  mutate(date_time = ymd_hms(unlist(map(strsplit(weather_wind_speed_data_clean$X, split='+', fixed=TRUE), 1))))
+  
+weather_rainfall_data_clean <- weather_rainfall_data_clean %>% # convert time to time object
+  #mutate(date_time = ymd_hms(weather_rainfall_data_clean$X))
+  mutate(date_time = ymd_hms(unlist(map(strsplit(weather_rainfall_data_clean$X, split='+', fixed=TRUE), 1))))
+  
+```
+
+
+
+```{r}
+inspect_weather_data <- function(weather_data, value_name){
+  weather_start_date <- min(weather_data$date_time)
+  weather_end_date <- max(weather_data$date_time)
+  weather_duration <- max(weather_data$date_time) - min(weather_data$date_time)
+  weather_frequency <- nrow(weather_data) / as.numeric(weather_duration)
+  print(paste('First day of measurement', weather_start_date))
+  print(paste('Last day of measurement', weather_end_date))
+  print(paste('Duration of measurement in days', weather_duration))
+  print(paste('Frequency of measurement per day', weather_frequency))
+  
+  weather_plot <-
+    ggplot(data = as.data.frame(reshape2::melt(subset(weather_data, select = -c(X)), id="date_time")), aes(x = date_time, y = value, col = variable)) +
+    geom_line() +
+    theme_minimal() +
+    theme() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    xlab("Date") +
+    ylab(value_name)
+  
+  return(weather_plot)
+}
+```
+
+
+```{r}
+inspect_weather_data(weather_humidity_data_clean, "humidity %")
+```
+
+```{r}
+inspect_weather_data(weather_rainfall_data_clean, "rainfall mm")
+```
+
+```{r}
+inspect_weather_data(weather_temperature_data_clean, "temperature °C")
+```
+```{r}
+inspect_weather_data(weather_wind_direction_data_clean, "wind durection °")
+```
+```{r}
+inspect_weather_data(weather_wind_speed_data_clean, "knots m/s")
+```
+
+How many weather stations are there?
+
+```{r}
+str(weather_stations_data)
+```
+
+What are the variable names?
+
+```{r}
+names(survey_data)
+```
+
+```{r}
+survey_data <- survey_data %>% 
+  # convert time to time object
+  #mutate(date_time = ymd_hms(survey_data$time)) %>% 
+  mutate(date_time = ymd_hms(unlist(map(strsplit(survey_data$time, split='.', fixed=TRUE), 1)))) %>% 
+  # replace empty strings with NA
+  mutate(across(where(is.character), ~na_if(., ""))) 
+head(survey_data)
+```
+
+
+
+
+```{r}
+str(survey_data)
+```
+
+How many users are in the study? How many data points for each user?
+
+```{r}
+nrow(table(survey_data$id_participant))
+```
+
+```{r}
+ggplot(survey_data[!is.na(survey_data$id_participant),],aes(id_participant)) +
+  geom_bar(stat = "count", position = "dodge") +
+  xlab("Participant Index") +
+  ylab("Number of Responses") +
+  scale_x_discrete(labels=seq(1,nrow(table(survey_data$id_participant)))) +
+  theme_minimal()
+
+# 
+# ggsave("Number_of_Responses_per_partisipant.png",
+#        width = 18, height = 6, dpi = 200, units = "in", device='png')
+```
+
+```{r}
+i1 <- which(!is.na(survey_data$q_thermal_preference))
+
+logs <- data.frame(log_row_index = rownames(survey_data[i1,]), 
+                   date_time = survey_data[i1,]$date_time)
+```
+
+
+```{r}
+grouped_logs <- merge(survey_data, logs, by = "date_time", all.x = TRUE) %>%
+  arrange(date_time) %>% # sort by time
+  fill(log_row_index, .direction = "down") %>% # fill group index
+  fill(log_row_index, .direction = "up") %>% # fill group index
+  group_by(id_participant) %>% # group by participant
+  arrange(id_participant, date_time) %>% #sort by user id then by time
+  group_by(log_row_index) # group by log group
+
+nrow(grouped_logs)
+```
+
+```{r}
+avg_heart_rate_past_10 <- grouped_logs %>% # group by log interval
+  summarize(average_heart_rate = mean(tail(na.omit(ts_heart_rate)), n = 10))
+
+nrow(avg_heart_rate_past_10)
+```
+
+```{r}
+total_dist_past_10 <- grouped_logs %>% # group by log interval
+  summarize(dist_walked = sum(tail(na.omit(ts_walking_distance)), n = 10)) 
+  # take mean of last 10 non NaN walked distance measures
+nrow(total_dist_past_10)
+```
+
+```{r}
+activity_data <- left_join(avg_heart_rate_past_10, 
+                           total_dist_past_10, 
+                           by = "log_row_index",
+                           keep = FALSE)
+head(activity_data)
+```
+
+```{r}
+activity_data_full <- survey_data[activity_data$log_row_index,]
+activity_data_full$log_row_index <- activity_data$log_row_index
+activity_data_full <- left_join(activity_data, activity_data_full, by = "log_row_index")
+head(activity_data_full)
+```
+
+```{r}
+humidity_stations_ids <- colnames(weather_humidity_data_clean)[colnames(weather_humidity_data_clean) %in% weather_stations_data$id]
+humidity_stations <- weather_stations_data[weather_stations_data$id %in% humidity_stations_ids, ]
+
+d <- pointDistance(activity_data_full[,c("ws_longitude", "ws_latitude")], 
+                   humidity_stations[,c("longitude", "latitude")], 
+                   lonlat=TRUE, allpairs=T) 
+i <- apply(d, 1, which.min)
+
+activity_data_full$humidity_ID = humidity_stations$id[i]
+
+
+rainfall_stations_ids <- colnames(weather_rainfall_data_clean)[colnames(weather_rainfall_data_clean) %in% weather_stations_data$id]
+rainfall_stations <- weather_stations_data[weather_stations_data$id %in% rainfall_stations_ids, ]
+
+d <- pointDistance(activity_data_full[,c("ws_longitude", "ws_latitude")], 
+                   rainfall_stations[,c("longitude", "latitude")], 
+                   lonlat=TRUE, allpairs=T) 
+i <- apply(d, 1, which.min)
+
+activity_data_full$rainfall_ID = rainfall_stations$id[i]
+
+
+temperature_stations_ids <- colnames(weather_temperature_data_clean)[colnames(weather_temperature_data_clean) %in% weather_stations_data$id]
+temperature_stations <- weather_stations_data[weather_stations_data$id %in% temperature_stations_ids, ]
+
+d <- pointDistance(activity_data_full[,c("ws_longitude", "ws_latitude")], 
+                   temperature_stations[,c("longitude", "latitude")], 
+                   lonlat=TRUE, allpairs=T) 
+i <- apply(d, 1, which.min)
+
+activity_data_full$temperature_ID = temperature_stations$id[i]
+
+
+wind_speed_stations_ids <- colnames(weather_wind_speed_data_clean)[colnames(weather_wind_speed_data_clean) %in% weather_stations_data$id]
+wind_speed_stations <- weather_stations_data[weather_stations_data$id %in% wind_speed_stations_ids, ]
+
+d <- pointDistance(activity_data_full[,c("ws_longitude", "ws_latitude")], 
+                   wind_speed_stations[,c("longitude", "latitude")], 
+                   lonlat=TRUE, allpairs=T) 
+i <- apply(d, 1, which.min)
+
+activity_data_full$wind_speed_ID = wind_speed_stations$id[i]
+
+
+wind_direction_stations_ids <- colnames(weather_wind_direction_data_clean)[colnames(weather_wind_direction_data_clean) %in% weather_stations_data$id]
+wind_direction_stations <- weather_stations_data[weather_stations_data$id %in% wind_direction_stations_ids, ]
+
+d <- pointDistance(activity_data_full[,c("ws_longitude", "ws_latitude")], 
+                   wind_direction_stations[,c("longitude", "latitude")], 
+                   lonlat=TRUE, allpairs=T) 
+i <- apply(d, 1, which.min)
+
+activity_data_full$wind_direction_ID = wind_direction_stations$id[i]
+
+head(activity_data_full)
+```
+```{r}
+str(weather_humidity_data_clean[,c(humidity_stations_ids,'date_time')])
+```
+
+
+
+```{r}
+melted_humidity_data <- reshape2::melt(weather_humidity_data_clean[,c(humidity_stations_ids,'date_time')], id='date_time')
+colnames(melted_humidity_data)[colnames(melted_humidity_data) == 'variable'] <- 'humidity_ID'
+colnames(melted_humidity_data)[colnames(melted_humidity_data) == 'value'] <- 'humidity'
+setDT(melted_humidity_data)
+
+melted_rainfall_data <- reshape2::melt(weather_rainfall_data_clean[,c(rainfall_stations_ids,'date_time')], id='date_time')
+colnames(melted_rainfall_data)[colnames(melted_rainfall_data) == 'variable'] <- 'rainfall_ID'
+colnames(melted_rainfall_data)[colnames(melted_rainfall_data) == 'value'] <- 'rainfall'
+setDT(melted_rainfall_data)
+
+melted_temperature_data <- reshape2::melt(weather_temperature_data_clean[,c(temperature_stations_ids,'date_time')], id='date_time')
+colnames(melted_temperature_data)[colnames(melted_temperature_data) == 'variable'] <- 'temperature_ID'
+colnames(melted_temperature_data)[colnames(melted_temperature_data) == 'value'] <- 'temperature'
+setDT(melted_temperature_data)
+
+melted_wind_speed_data <- reshape2::melt(weather_wind_speed_data_clean[,c(wind_speed_stations_ids,'date_time')], id='date_time')
+colnames(melted_wind_speed_data)[colnames(melted_wind_speed_data) == 'variable'] <- 'wind_speed_ID'
+colnames(melted_wind_speed_data)[colnames(melted_wind_speed_data) == 'value'] <- 'wind_speed'
+setDT(melted_wind_speed_data)
+
+melted_wind_direction_data <- reshape2::melt(weather_wind_direction_data_clean[,c(wind_direction_stations_ids,'date_time')], id='date_time')
+colnames(melted_wind_direction_data)[colnames(melted_wind_direction_data) == 'variable'] <- 'wind_direction_ID'
+colnames(melted_wind_direction_data)[colnames(melted_wind_direction_data) == 'value'] <- 'wind_direction'
+setDT(melted_wind_direction_data)
+```
+
+```{r}
+setDT(activity_data_full)
+
+activity_data_full <- activity_data_full[, c("humidityTime", "humidity") := 
+    melted_humidity_data[activity_data_full, on = c("humidity_ID", "date_time"), roll = Inf, .(x.date_time, x.humidity)]][]
+
+activity_data_full <- activity_data_full[, c("rainfallTime", "rainfall") := 
+    melted_rainfall_data[activity_data_full, on = c("rainfall_ID", "date_time"), roll = Inf, .(x.date_time, x.rainfall)]][]
+
+activity_data_full <- activity_data_full[, c("temperatureTime", "temperature") := 
+    melted_temperature_data[activity_data_full, on = c("temperature_ID", "date_time"), roll = Inf, .(x.date_time, x.temperature)]][]
+
+activity_data_full <- activity_data_full[, c("wind_speedTime", "wind_speed") := 
+    melted_wind_speed_data[activity_data_full, on = c("wind_speed_ID", "date_time"), roll = Inf, .(x.date_time, x.wind_speed)]][]
+
+activity_data_full <- activity_data_full[, c("wind_directionTime", "wind_direction") := 
+    melted_wind_direction_data[activity_data_full, on = c("wind_direction_ID", "date_time"), roll = Inf, .(x.date_time, x.wind_direction)]][]
+
+head(activity_data_full, 100)
+```
+
+```{r}
+selected_data <- activity_data_full[,c(
+  'id_participant',
+  'ws_longitude',
+  'ws_latitude',
+  'dist_walked',
+  'average_heart_rate',
+  'q_location',
+  'Green.View.Mean',
+  'Footprint.Mean',
+  'Perimeter.Mean',
+  'Building.Count',
+  'Sky.View.Mean',
+  'Building.View.Mean',
+  'Road.View.Mean',
+  'humidity',
+  'rainfall',
+  'temperature',
+  'wind_speed',
+  'wind_direction',
+  'q_thermal_preference',
+  'date_time',
+  'dT',
+  'Visual.Complexity.Mean'
+)]
+
+selected_data <- drop_na(selected_data)
+
+
+selected_data$q_location <- as.factor(selected_data$q_location)
+selected_data$q_thermal_preference <-
+  as.factor(selected_data$q_thermal_preference)
+```
+
+
+```{r}
+summary(selected_data)
+```
+
+```{r}
+selected_data %>% plot_histogram(ggtheme = theme_minimal()) 
+```
+
+```{r}
+selected_data_no_outliers <- selected_data[(
+  selected_data$dT < 500 & # remove measurements that are infrequent
+  selected_data$Footprint.Mean < 10000
+   ),]
+
+
+#selected_data_no_outliers <- selected_data_no_outliers[selected_data_no_outliers$q_location == "Outdoor", ]
+selected_data_no_outliers %>% plot_histogram(ggtheme = theme_minimal()) 
+```
+```{r}
+ggplot(data=selected_data_no_outliers,aes(q_thermal_preference)) +
+  geom_bar(aes(fill=as.factor(round(temperature)))) + theme_minimal() + 
+  scale_color_gradient2(low = "blue", mid = "white", high = "red", space = "Lab" )
+```
+
+
+```{r}
+mapboxToken <- paste(readLines("mapbox_token.txt"), collapse="")
+```
+
+
+```{r}
+# creating a sample data.frame with your lat/lon points
+lon <- selected_data_no_outliers$ws_longitude
+lat <- selected_data_no_outliers$ws_latitude
+thermal_preference <- selected_data_no_outliers$q_thermal_preference
+
+df <- as.data.frame(cbind(lon,lat))
+
+df <- df %>% 
+  arrange(thermal_preference) %>% 
+  mutate(thermal_preference = as.factor(thermal_preference),
+         color = recode(thermal_preference,'Cooler' = "#fe4a49",
+                        "No change" = "#fed766", "Warmer" = "#009fb7"))
+
+fig <- df
+
+fig <- fig %>%
+  plot_ly(
+    lat = ~lat,
+    lon = ~lon,
+    type = 'scattermapbox',
+    mode = "markers",
+    color  = ~thermal_preference,
+    legendgroup  = ~thermal_preference,
+    marker = list(size=7)) 
+
+
+fig <- fig %>%
+  layout(
+    mapbox = list(
+      style = 'light',
+      zoom =10,
+      center = list(lon = mean(df$lon), lat = mean(df$lat))))
+
+fig <- fig %>%
+
+  config(mapboxAccessToken = mapboxToken)
+
+pb <- plotly_build(fig)
+
+pb
+
+```
+
+```{r}
+ggplot(selected_data_no_outliers, aes(date_time, temperature)) + geom_point() + theme_minimal()
+
+```
+
+```{r}
+as.numeric(survey_data$date_time) %>%
+  plot_histogram(ggtheme = theme_minimal())
+```
+
+```{r}
+# Temperature increases during the day
+ggplot(selected_data[ selected_data$date_time > ymd("2022/10/18") &
+                      selected_data$date_time < ymd("2022/10/19") #&
+                     ,], aes(date_time, temperature)) + geom_point() + theme_minimal()
+```
+========================Model Testing Starts Here===============================
+
+```{r}
+selected_data_log <-
+  subset(
+    selected_data_no_outliers,
+    select = -c(
+      id_participant,
+      ws_longitude,
+      ws_latitude,
+      Perimeter.Mean,
+      humidity,
+      wind_direction,
+      Building.Count,
+      dT
+    )
+  )
+
+
+selected_data_log$q_thermal_preference <-
+  as.factor(selected_data_log$q_thermal_preference == "Cooler")
+
+selected_data_log$is_outdoor <-  
+  as.factor(selected_data_log$q_location == "Outdoor")
+
+# 
+selected_data_log$is_winter <- as.factor(selected_data_log$date_time > ym("2023/04"))
+selected_data_log$is_day <- as.factor((hour(selected_data_log$date_time) > 12 &
+                                       hour(selected_data_log$date_time) < 18) == T)
+
+selected_data_log <-
+  subset(selected_data_log, select = -c(q_location, date_time))
+
+set.seed(1)
+
+# Divide the data into 80% training and 20% testing
+train <-
+  sample(1:nrow(selected_data_log),
+         size = round(nrow(selected_data_log) * 0.8),
+         replace = FALSE)
+
+selected_data_log_train <- selected_data_log[train, ]
+selected_data_log_test <- selected_data_log[-train, ]
+
+selected_data_log %>%
+  mutate(is_outdoor = as.numeric(is_outdoor)) %>%
+  mutate(q_thermal_preference = as.numeric(q_thermal_preference)) %>%
+  mutate(is_winter = as.numeric(is_winter)) %>%
+  mutate(is_day = as.numeric(is_day)) %>%
+  cor(use = "pairwise.complete.obs") %>%
+  corrplot(order = 'alphabet', diag = F)
+```
+```{r}
+str(selected_data_log_train)
+```
+
+
+
+```{r}
+model <- glm(q_thermal_preference ~ . , family = binomial(link = "logit"), data = selected_data_log_train)
+summary(model)
+```
+```{r}
+model2 <-
+  glm(
+    q_thermal_preference ~ is_winter + is_outdoor + is_day + temperature + Sky.View.Mean,
+    family = binomial(link = "logit"),
+    data = selected_data_log_train
+  )
+summary(model2)
+
+```
+
+```{r}
+# Step 3: Predict probabilities
+probabilities <- predict(model2, selected_data_log_test, type = "response")
+
+# Step 4 and 5: Use different cutoffs and calculate accuracy
+cutoffs <- c(0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+
+accuracies <- sapply(cutoffs, function(cutoff) {
+  # Convert probabilities to binary predictions
+  predictions <- ifelse(probabilities > cutoff, 2, 1)
+  
+  # Calculate accuracy
+  accuracy(as.numeric(selected_data_log_test$q_thermal_preference), predictions)
+  #mean(predictions == as.numeric(selected_data_log_test$q_thermal_preference))
+})
+
+# Print the accuracies for each cutoff
+names(accuracies) <- cutoffs
+accuracies
+pR2(model2)['McFadden']
+```
+
+```{r}
+fit.tree = rpart(q_thermal_preference ~ ., data=selected_data_log_train, method="class", cp=0.008)
+prp(fit.tree,
+    main = "Tree model for predicting if thermal preference is \"Cooler\"",
+    box.palette = "auto",
+    fallen.leaves = F,  
+    shadow.col = "gray",   
+    branch.lty = 3,        
+    branch = .5,           
+    faclen = 0,            
+    round = 0)
+```
+
+```{r}
+printcp(fit.tree)
+```
+
+```{r}
+bestcp <- fit.tree$cptable[which.min(fit.tree$cptable[,"xerror"]),"CP"]
+pruned.tree <- prune(fit.tree, cp = bestcp)
+
+prp(pruned.tree,
+    main = "Tree model for predicting if thermal preference is \"Cooler\"",
+    box.palette = "auto",
+    fallen.leaves = F,  
+    shadow.col = "gray",   
+    branch.lty = 3,        
+    branch = .5,           
+    faclen = 0,            
+    round = 0)
+```
+```{r}
+predicted <- as.numeric(predict(pruned.tree, selected_data_log_test, type = "class"))
+sum(predicted == as.numeric(selected_data_log_test$q_thermal_preference)) / nrow(selected_data_log_test)
+Metrics::accuracy(as.numeric(selected_data_log_test$q_thermal_preference), predicted)
+```
+
+```{r}
+SS_tot <- sum((as.numeric(selected_data_log_train$q_thermal_preference) - mean(as.numeric(selected_data_log_train$q_thermal_preference))) ^ 2)
+SS_res_tree <- sum((as.numeric(selected_data_log_train$q_thermal_preference) - as.numeric(predict(pruned.tree, selected_data_log_train, type = "class"))) ^ 2)
+
+R_sq_lm <- 1 - SS_res_tree / SS_tot
+R_sq_lm
+```
+
+```{r}
+set.seed(50)
+
+model_forest <-
+  randomForest(
+    q_thermal_preference ~ . ,
+    data = selected_data_log_train,
+    importance = TRUE,
+    ntree = 150
+  )
+
+predicted <- as.numeric(predict(model_forest, selected_data_log_test))
+sum(predicted == as.numeric(selected_data_log_test$q_thermal_preference)) / nrow(selected_data_log_test)
+Metrics::accuracy(as.numeric(selected_data_log_test$q_thermal_preference), predicted)
+```
+```{r}
+randomForest::importance(model_forest)
+```
+
+
+```{r}
+SS_tot <- sum((as.numeric(selected_data_log_train$q_thermal_preference) - mean(as.numeric(selected_data_log_train$q_thermal_preference))) ^ 2)
+SS_res_tree <- sum((as.numeric(selected_data_log_train$q_thermal_preference) - as.numeric(predict(model_forest, selected_data_log_train))) ^ 2)
+
+R_sq_lm <- 1 - SS_res_tree / SS_tot
+R_sq_lm
+```
+
+```{r}
+selected_data_multinom <-
+  subset(
+    selected_data_no_outliers,
+    select = -c(
+      id_participant,
+      ws_longitude,
+      ws_latitude,
+      Perimeter.Mean,
+      wind_direction,
+      Building.Count,
+      dT
+    )
+  )
+
+
+selected_data_multinom$q_thermal_preference <-
+  as.factor(selected_data_multinom$q_thermal_preference)
+
+selected_data_multinom$is_outdoor <-  
+  as.factor(selected_data_multinom$q_location == "Outdoor")
+
+selected_data_multinom$is_winter <- as.factor(selected_data_multinom$date_time > ym("2023/04"))
+selected_data_multinom$is_day <-  as.factor((hour(selected_data_multinom$date_time) > 12 &
+                                             hour(selected_data_multinom$date_time) < 18) == T)
+
+selected_data_multinom <-
+  subset(selected_data_multinom, select = -c(q_location, date_time))
+
+set.seed(2)
+
+# Divide the data into 80% training and 20% testing
+train <-
+  sample(1:nrow(selected_data_multinom),
+         size = round(nrow(selected_data_multinom) * 0.8),
+         replace = FALSE)
+
+selected_data_multinom_train <- selected_data_multinom[train, ]
+selected_data_multinom_test <- selected_data_multinom[-train, ]
+
+selected_data_multinom %>%
+  mutate(is_outdoor = as.numeric(is_outdoor)) %>%
+  mutate(q_thermal_preference = as.numeric(q_thermal_preference)) %>%
+  mutate(is_winter = as.numeric(is_winter)) %>%
+  mutate(is_day = as.numeric(is_day)) %>%
+  cor(use = "pairwise.complete.obs") %>%
+  corrplot(order = 'alphabet', diag = F)
+```
+
+```{r}
+model_multinom <- multinom(q_thermal_preference ~ ., data = selected_data_multinom_train)
+summary(model_multinom)
+```
+
+```{r}
+tidy(model_multinom, conf.int = TRUE) %>% 
+  kable() %>% 
+  kable_styling("basic", full_width = FALSE)
+```
+
+```{r}
+model_multinom2 <- multinom(q_thermal_preference ~ is_outdoor + is_winter + temperature + humidity + Green.View.Mean + Sky.View.Mean + Building.View.Mean + Road.View.Mean, data = selected_data_multinom_train)
+summary(model_multinom)
+```
+
+```{r}
+tidy(model_multinom2, conf.int = TRUE) %>% 
+  kable() %>% 
+  kable_styling("basic", full_width = FALSE)
+```
+
+
+```{r}
+predicted <-
+  predict(model_multinom2, selected_data_multinom_test, type="class")
+sum(predicted == selected_data_multinom_test$q_thermal_preference) / nrow(selected_data_multinom_test)
+pR2(model_multinom2)['McFadden']
+
+Metrics::accuracy(selected_data_multinom_test$q_thermal_preference, predict(model_multinom2, selected_data_multinom_test, type="class"))
+```
+```{r}
+table(predict(model_multinom2, selected_data_multinom_test, type = "class"))
+```
+
+
+```{r}
+fit.tree_multinom = rpart(q_thermal_preference ~ ., data=selected_data_multinom_train, method="class", cp=0.008)
+prp(fit.tree_multinom,
+    main = "Tree model for predicting actual thermal preference",
+    box.palette = "auto",
+    fallen.leaves = F,  
+    shadow.col = "gray",   
+    branch.lty = 3,        
+    branch = .5,           
+    faclen = 0,            
+    round = 0)
+```
+```{r}
+fit.tree_multinom$variable.importance
+```
+
+
+```{r}
+bestcp_multinom <- fit.tree_multinom$cptable[which.min(fit.tree_multinom$cptable[,"xerror"]),"CP"]
+bestcp_multinom
+final_tree_model <- prune(fit.tree_multinom, cp = bestcp_multinom)
+final_tree_model$variable.importance
+
+prp(final_tree_model,
+    main = "Tree model for predicting actual thermal preference",
+    box.palette = "auto",
+    fallen.leaves = F,  
+    shadow.col = "gray",   
+    branch.lty = 3,        
+    branch = .5,           
+    faclen = 0,            
+    round = 0)
+```
+```{r}
+final_tree_model <-
+  rpart(
+    q_thermal_preference ~ 
+      Visual.Complexity.Mean + 
+      Footprint.Mean + 
+      Sky.View.Mean + 
+      Green.View.Mean + 
+      Road.View.Mean + 
+      Sky.View.Mean + 
+      temperature +
+      humidity + 
+      is_outdoor,
+    data = selected_data_multinom_train,
+    method = "class",
+    cp = 0.008
+  )
+prp(final_tree_model,
+    main = "Tree model for predicting actual thermal preference",
+    box.palette = "auto",
+    fallen.leaves = F,  
+    shadow.col = "gray",   
+    branch.lty = 3,        
+    branch = .5,           
+    faclen = 0,            
+    round = 0)
+```
+
+
+```{r}
+predicted <- as.numeric(predict(final_tree_model, selected_data_multinom_test, type = "class"))
+sum(predicted == as.numeric(selected_data_multinom_test$q_thermal_preference)) / nrow(selected_data_multinom_test)
+```
+
+```{r}
+table(predict(final_tree_model, selected_data_multinom_test, type = "class"))
+```
+
+
+```{r}
+set.seed(50)
+
+model_forest_multinom <-
+  randomForest(
+    q_thermal_preference ~ . -average_heart_rate -dist_walked -rainfall -wind_speed,
+    data = selected_data_multinom_train,
+    importance = TRUE,
+    ntree = 200
+  )
+
+predicted <- as.numeric(predict(model_forest_multinom, selected_data_multinom_test))
+sum(predicted == as.numeric(selected_data_multinom_test$q_thermal_preference)) / nrow(selected_data_multinom_test)
+```
+```{r}
+randomForest::importance(model_forest_multinom)
+```
+```{r}
+table(predict(model_forest_multinom, selected_data_multinom_test, type = "class"))
+```
+```{r}
+table(selected_data_multinom_test$q_thermal_preference)
+```
+```{r}
+# if we predict "No Change" we will be correct 51% of the time
+sum(selected_data_multinom_test$q_thermal_preference == "No change") / nrow(selected_data_multinom_test)
+```
+
+========================Model Testing Ends Here=================================
+
+
+
+
+
+
+
+
+
+
